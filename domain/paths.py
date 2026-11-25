@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+APP_DATA_DIR_NAME = "YanxiSeatReserver"
 
 
 def is_frozen() -> bool:
@@ -12,11 +15,16 @@ def is_frozen() -> bool:
 def get_app_dir() -> Path:
     """Return the writable application directory for runtime data (config, logs, cache, storage_state).
 
-    In frozen (.exe) mode, returns the directory containing the executable.
+    In frozen (.exe) mode, uses Windows per-user AppData (%LOCALAPPDATA%\\YanxiSeatReserver)
+    so zero stray files are created beside the standalone executable.
     In source mode, returns the repository root directory.
     """
     if is_frozen():
-        return Path(sys.executable).resolve().parent
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        base = Path(local_app_data) if local_app_data else (Path.home() / "AppData" / "Local")
+        app_dir = (base / APP_DATA_DIR_NAME).resolve()
+        app_dir.mkdir(parents=True, exist_ok=True)
+        return app_dir
     return Path(__file__).resolve().parent.parent
 
 

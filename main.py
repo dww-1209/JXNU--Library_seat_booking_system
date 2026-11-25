@@ -242,7 +242,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     multiprocessing.freeze_support()
     if is_frozen():
-        os.chdir(get_app_dir())
+        app_dir = get_app_dir()
+        app_dir.mkdir(parents=True, exist_ok=True)
+        os.chdir(app_dir)
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

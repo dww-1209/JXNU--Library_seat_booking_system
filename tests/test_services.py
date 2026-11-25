@@ -810,20 +810,32 @@ def test_domain_paths_source_and_frozen_modes(
     assert get_app_dir() == expected_root
     assert get_resource_dir() == expected_root
 
-    # Frozen mode with _MEIPASS (PyInstaller onedir _internal / onefile temp dir)
-    fake_exe_dir = tmp_path / "dist" / "YanxiSeatReserver"
+    # Frozen mode with LOCALAPPDATA set and _MEIPASS present (PyInstaller onefile temp dir)
+    fake_exe_dir = tmp_path / "Desktop"
     fake_exe_dir.mkdir(parents=True)
     fake_exe = fake_exe_dir / "YanxiSeatReserver.exe"
-    fake_meipass = fake_exe_dir / "_internal"
+    fake_meipass = tmp_path / "temp" / "_MEI12345"
     fake_meipass.mkdir(parents=True)
+    fake_local_appdata = tmp_path / "LocalAppData"
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(fake_exe))
     monkeypatch.setattr(sys, "_MEIPASS", str(fake_meipass), raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_local_appdata))
 
     assert is_frozen() is True
-    assert get_app_dir() == fake_exe_dir.resolve()
+    expected_appdata_dir = (fake_local_appdata / "YanxiSeatReserver").resolve()
+    assert get_app_dir() == expected_appdata_dir
+    assert expected_appdata_dir.is_dir()
     assert get_resource_dir() == fake_meipass.resolve()
+
+    # Frozen mode with LOCALAPPDATA absent falls back to Path.home()/AppData/Local/YanxiSeatReserver
+    fake_home = tmp_path / "FakeHome"
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    expected_fallback_dir = (fake_home / "AppData" / "Local" / "YanxiSeatReserver").resolve()
+    assert get_app_dir() == expected_fallback_dir
+    assert expected_fallback_dir.is_dir()
 
     # Frozen mode without _MEIPASS falls back to executable directory
     monkeypatch.delattr(sys, "_MEIPASS", raising=False)
