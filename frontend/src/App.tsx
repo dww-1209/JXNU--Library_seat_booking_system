@@ -165,10 +165,12 @@ export const App: React.FC = () => {
         if (cancelled) return;
 
         let initialRoomId = "2552";
+        let hasSavedPassword = false;
         if (cfgRes.status === "fulfilled") {
           setReservation(cfgRes.value.reservation);
           setSchedule(cfgRes.value.schedule);
           setAuth(cfgRes.value.auth);
+          hasSavedPassword = cfgRes.value.auth.hasPassword;
           if (cfgRes.value.reservation.roomId) {
             initialRoomId = cfgRes.value.reservation.roomId;
             setRoomDraftSeats({
@@ -178,13 +180,15 @@ export const App: React.FC = () => {
           }
         }
 
+        let loadedRooms: Room[] = [];
         if (roomsRes.status === "fulfilled") {
-          setRooms(roomsRes.value);
+          loadedRooms = roomsRes.value;
+          setRooms(loadedRooms);
           if (
-            roomsRes.value.length > 0 &&
-            !roomsRes.value.some((r) => r.id === initialRoomId)
+            loadedRooms.length > 0 &&
+            !loadedRooms.some((r) => r.id === initialRoomId)
           ) {
-            initialRoomId = roomsRes.value[0].id;
+            initialRoomId = loadedRooms[0].id;
           }
         }
 
@@ -198,9 +202,14 @@ export const App: React.FC = () => {
           setLogs(logsRes.value.entries.slice(-400));
         }
 
-        await loadSeatMap(initialRoomId);
+        if (loadedRooms.length > 0) {
+          await loadSeatMap(initialRoomId);
+        } else {
+          setSeatMap(null);
+          setSeatMapError(null);
+        }
 
-        // Refresh live auth status quietly in background
+        // Refresh live auth status quietly and auto-open login on fresh cold start
         api
           .getAuthStatus()
           .then((liveAuth) => {
@@ -211,9 +220,16 @@ export const App: React.FC = () => {
                 phoneMasked: liveAuth.phoneMasked || prev.phoneMasked,
                 message: liveAuth.message || prev.message,
               }));
+              if (!liveAuth.loggedIn && !hasSavedPassword) {
+                setLoginModalOpen(true);
+              }
             }
           })
-          .catch(() => {});
+          .catch(() => {
+            if (!cancelled && !hasSavedPassword) {
+              setLoginModalOpen(true);
+            }
+          });
       } finally {
         if (!cancelled) {
           setRoomsLoading(false);
@@ -612,13 +628,54 @@ export const App: React.FC = () => {
         phoneMasked: res.phoneMasked || prev.phoneMasked,
         message: res.message,
       }));
-      if (params.deptIdEnc && params.deptIdEnc !== reservation.deptIdEnc) {
-        setReservation((prev) => ({
-          ...prev,
-          deptIdEnc: params.deptIdEnc || prev.deptIdEnc,
+      showToast("success", "超星学习通会话登录成功，正在同步全馆教室...");
+
+      setRoomsLoading(true);
+      try {
+        const [freshCfg, freshAuth, freshRooms] = await Promise.all([
+          api.getConfig(),
+          api.getAuthStatus().catch(() => null),
+          api.getRooms(),
+        ]);
+
+        setReservation(freshCfg.reservation);
+        setSchedule(freshCfg.schedule);
+        setAuth((prev) => ({
+          ...freshCfg.auth,
+          loggedIn: freshAuth ? freshAuth.loggedIn : true,
+          phoneMasked:
+            freshAuth?.phoneMasked ||
+            freshCfg.auth.phoneMasked ||
+            res.phoneMasked ||
+            prev.phoneMasked,
+          message: freshAuth?.message || res.message,
         }));
+        if (freshCfg.reservation.roomId) {
+          setRoomDraftSeats((drafts) => ({
+            ...drafts,
+            [freshCfg.reservation.roomId]: freshCfg.reservation.targetSeats,
+          }));
+        }
+
+        setRooms(freshRooms);
+        if (freshRooms.length > 0) {
+          const targetRoom =
+            freshRooms.find((r) => r.id === freshCfg.reservation.roomId) ??
+            freshRooms[0];
+          if (targetRoom.id !== freshCfg.reservation.roomId) {
+            setReservation((prev) => ({
+              ...prev,
+              roomId: targetRoom.id,
+              roomName: targetRoom.display_name,
+            }));
+          }
+          await loadSeatMap(targetRoom.id);
+        }
+      } catch {
+        // Non-fatal; user can still retry from canvas
+      } finally {
+        setRoomsLoading(false);
       }
-      showToast("success", "超星学习通会话登录成功");
     }
     await refreshLogs();
     return { success: res.success, message: res.message };
@@ -682,9 +739,12 @@ export const App: React.FC = () => {
           seatMap={seatMap}
           loading={seatMapLoading}
           error={seatMapError}
+          loggedIn={auth.loggedIn}
+          hasRooms={rooms.length > 0}
           targetSeats={reservation.targetSeats}
           onToggleSeat={handleToggleSeat}
           onRetry={() => loadSeatMap(reservation.roomId)}
+          onOpenLogin={() => setLoginModalOpen(true)}
         />
 
         <RightInspector

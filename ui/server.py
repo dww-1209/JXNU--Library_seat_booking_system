@@ -208,7 +208,6 @@ def create_app(container: AppContainer | None = None) -> FastAPI:
             password = current_cfg.auth.credentials.password
 
         dept_id = (req.deptIdEnc or current_cfg.reservation.deptIdEnc or "df23c42633fa45e1").strip()
-        prev_dept = current_cfg.reservation.deptIdEnc
 
         ok, message = await ctx.chaoxing.login(
             phone=phone,
@@ -221,8 +220,7 @@ def create_app(container: AppContainer | None = None) -> FastAPI:
                 password=password,
                 dept_id_enc=dept_id,
             )
-            if dept_id != prev_dept:
-                ctx.library_service.clear_cache()
+            ctx.library_service.clear_cache()
 
         return {
             "success": ok,

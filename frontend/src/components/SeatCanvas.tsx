@@ -10,10 +10,12 @@ import {
   Clock,
   Compass,
   Grid3X3,
+  KeyRound,
   Layers,
   Maximize2,
   RefreshCw,
   Search,
+  UserCheck,
   X,
   ZoomIn,
   ZoomOut,
@@ -25,9 +27,12 @@ interface SeatCanvasProps {
   seatMap: RoomSeatMap | null;
   loading: boolean;
   error: string | null;
+  loggedIn: boolean;
+  hasRooms: boolean;
   targetSeats: string[];
   onToggleSeat: (seatNum: string) => void;
   onRetry: () => void;
+  onOpenLogin: () => void;
 }
 
 interface ViewportTransform {
@@ -51,9 +56,12 @@ export const SeatCanvas: React.FC<SeatCanvasProps> = ({
   seatMap,
   loading,
   error,
+  loggedIn,
+  hasRooms,
   targetSeats,
   onToggleSeat,
   onRetry,
+  onOpenLogin,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const animFrameRef = useRef<number | null>(null);
@@ -445,6 +453,10 @@ export const SeatCanvas: React.FC<SeatCanvasProps> = ({
                 )}
               </div>
             </>
+          ) : !loggedIn && !hasRooms && !loading ? (
+            <span className="text-[14px] font-medium text-[#86868B]">
+              等待登录学习通账号以同步阅览室
+            </span>
           ) : (
             <div className="h-4 w-48 animate-pulse rounded-md bg-black/[0.06]" />
           )}
@@ -525,7 +537,38 @@ export const SeatCanvas: React.FC<SeatCanvasProps> = ({
           </div>
         )}
 
-        {error && !seatMap && (
+        {!loggedIn && !hasRooms && !seatMap && !loading && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              className="apple-card flex max-w-md flex-col items-center gap-4 rounded-3xl px-8 py-8 text-center"
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0071E3]/10 text-[#0071E3]">
+                <KeyRound className="h-7 w-7 stroke-[1.6]" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-[17px] font-semibold tracking-tight text-[#1D1D1F]">
+                  欢迎使用砚席 · 请先登录学习通账号
+                </h3>
+                <p className="text-[12.5px] leading-relaxed text-[#86868B]">
+                  登录后将自动同步全馆自习室列表与精确平面座位分布图，凭据仅保存在本机
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenLogin}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0071E3] px-6 text-[13.5px] font-semibold text-white shadow-[0_4px_14px_rgba(0,113,227,0.28)] transition hover:bg-[#0077ED] active:scale-[0.98]"
+              >
+                <UserCheck className="h-4 w-4 stroke-[1.8]" />
+                <span>登录学习通账号</span>
+              </button>
+            </motion.div>
+          </div>
+        )}
+
+        {error && !seatMap && (loggedIn || hasRooms) && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6">
             <div className="apple-card flex max-w-sm flex-col items-center gap-3 rounded-2xl p-6 text-center">
               <Compass className="h-8 w-8 stroke-[1.5] text-[#FF3B30]" />

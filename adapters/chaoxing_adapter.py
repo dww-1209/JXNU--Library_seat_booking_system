@@ -511,7 +511,8 @@ class ChaoxingAdapter(AuthPort, SeatCatalogPort, ReservationExecutorPort):
                 )
                 raise RuntimeError(f"超星接口响应解析失败 (HTTP {resp.status_code})")
 
-            self._logged_in_cached = True
+            if parsed_json.get("success") is True and self._has_auth_cookies():
+                self._logged_in_cached = True
             self._bus.debug(
                 stage,
                 f"{method} {url.replace('https://office.chaoxing.com', '')} -> {resp.status_code} ({latency_ms}ms)",
@@ -524,6 +525,23 @@ class ChaoxingAdapter(AuthPort, SeatCatalogPort, ReservationExecutorPort):
             return parsed_json, resp.headers, latency_ms
 
         raise RuntimeError("超星接口会话重试失败")
+
+    def _has_auth_cookies(self) -> bool:
+        """Return True only when real Chaoxing authentication cookies are present."""
+        if not self._cookies and self._storage_state_path.exists():
+            self._load_storage_state_into_jar()
+        auth_cookie_names = {"UID", "_uid", "vc3", "oa_uid", "p_auth_token"}
+        for cookie in self._cookies.jar:
+            if cookie.name in auth_cookie_names and cookie.value:
+                return True
+        if self._config_store is not None:
+            try:
+                raw_cookie = self._config_store.load().auth.rawCookieStr or ""
+                if any(f"{name}=" in raw_cookie for name in ("UID", "_uid", "vc3")):
+                    return True
+            except Exception:
+                pass
+        return False
 
     async def _try_auto_relogin(self, dept_id_enc: str, reason: str) -> bool:
         async with self._auth_lock:
@@ -560,22 +578,38 @@ class ChaoxingAdapter(AuthPort, SeatCatalogPort, ReservationExecutorPort):
             )
 
     async def check_session(self, dept_id_enc: str) -> tuple[bool, str]:
-        """Verify stored session against Chaoxing read-only role/index endpoint."""
+        """Verify stored session against an auth-enforced Chaoxing endpoint (/room/list)."""
         clean_dept = (dept_id_enc or "df23c42633fa45e1").strip()
+        if not self._has_auth_cookies():
+            await self._try_auto_relogin(clean_dept, reason="本地尚无有效登录凭据缓存")
+        if not self._has_auth_cookies():
+            self._logged_in_cached = False
+            return False, "尚未登录，请点击左上角登录学习通账号"
+
+        today_str = datetime.now(CN_TZ).strftime("%Y-%m-%d")
         try:
             payload, _, latency_ms = await self._request_chaoxing_json(
                 "GET",
-                "https://office.chaoxing.com/data/apps/seat/person/role",
+                "https://office.chaoxing.com/data/apps/seat/room/list",
                 clean_dept,
-                params={"fidEnc": clean_dept},
+                params={
+                    "time": "",
+                    "cpage": 1,
+                    "pageSize": 1,
+                    "firstLevelName": "",
+                    "secondLevelName": "",
+                    "thirdLevelName": "",
+                    "day": today_str,
+                    "deptIdEnc": clean_dept,
+                },
                 stage="AUTH",
                 allow_auto_relogin=True,
             )
-            if payload.get("success") is True:
+            if payload.get("success") is True and isinstance(payload.get("data"), dict):
                 self._logged_in_cached = True
                 return True, f"超星会话在线 ({latency_ms}ms)"
             self._logged_in_cached = False
-            return False, str(payload.get("msg") or "超星会话未生效")
+            return False, str(payload.get("msg") or "超星会话未登录或已过期，请重新登录")
         except Exception as exc:
             self._logged_in_cached = False
             return False, str(exc)
@@ -588,6 +622,13 @@ class ChaoxingAdapter(AuthPort, SeatCatalogPort, ReservationExecutorPort):
         """Fetch all library reading rooms from /data/apps/seat/room/list."""
         clean_dept = (dept_id_enc or "df23c42633fa45e1").strip()
         query_day = (day or datetime.now(CN_TZ).strftime("%Y-%m-%d")).strip()
+
+        if not self._has_auth_cookies():
+            await self._try_auto_relogin(clean_dept, reason="拉取自习室前本地尚无会话缓存")
+        if not self._has_auth_cookies():
+            self._logged_in_cached = False
+            self._bus.warning("CATALOG", "会话未登录或已过期，无法拉取自习室列表")
+            return []
 
         payload, _, latency_ms = await self._request_chaoxing_json(
             "GET",
@@ -606,7 +647,20 @@ class ChaoxingAdapter(AuthPort, SeatCatalogPort, ReservationExecutorPort):
             stage="CATALOG",
         )
 
-        data_block = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        if payload.get("success") is not True or not isinstance(payload.get("data"), dict):
+            self._logged_in_cached = False
+            self._bus.warning(
+                "CATALOG",
+                "会话未登录或已过期，无法拉取自习室列表",
+                detail={
+                    "success": payload.get("success"),
+                    "msg": payload.get("msg"),
+                    "latencyMs": latency_ms,
+                },
+            )
+            return []
+
+        data_block = payload.get("data")
         raw_rooms = data_block.get("seatRoomList", []) if isinstance(data_block, dict) else []
         rooms: list[Room] = []
 

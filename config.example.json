@@ -26,8 +26,8 @@
   "auth": {
     "loginMode": "password",
     "credentials": {
-      "phone": "13800000000",
-      "password": "your_password_here"
+      "phone": "",
+      "password": ""
     },
     "rawCookieStr": ""
   }

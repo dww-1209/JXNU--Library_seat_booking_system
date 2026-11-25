@@ -94,10 +94,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             />
             <div className="min-w-0">
               <div className="truncate text-[12px] font-medium text-[#1D1D1F] tabular-nums">
-                {auth.phoneMasked || "配置超星账号"}
+                {auth.loggedIn
+                  ? auth.phoneMasked || "已登录账号"
+                  : auth.phoneMasked || "未登录账号"}
               </div>
               <div className="truncate text-[10.5px] text-[#86868B]">
-                {auth.loggedIn ? "会话在线 · 点击管理" : "点击登录并保存会话"}
+                {auth.loggedIn ? "会话在线 · 点击管理" : "点击登录学习通"}
               </div>
             </div>
           </div>
@@ -118,6 +120,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 className="h-10 animate-pulse rounded-xl bg-black/[0.04]"
               />
             ))}
+          </div>
+        ) : rooms.length === 0 && !auth.loggedIn ? (
+          <div className="flex h-full flex-col items-center justify-center px-4 py-10 text-center">
+            <Building2 className="h-6 w-6 stroke-[1.5] text-[#AEAEB2]" />
+            <p className="mt-2 text-[12px] font-medium text-[#86868B]">
+              登录后自动加载全馆教室
+            </p>
           </div>
         ) : (
           <LayoutGroup id="sidebar-rooms">
