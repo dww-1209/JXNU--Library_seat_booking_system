@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   Lock,
   RefreshCw,
@@ -35,6 +37,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 }) => {
   const [phone, setPhone] = useState(auth.phone || "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [deptId, setDeptId] = useState(deptIdEnc || "df23c42633fa45e1");
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -46,6 +49,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   useEffect(() => {
     if (open) {
       setPhone(auth.phone || "");
+      setShowPassword(false);
       setDeptId(deptIdEnc || "df23c42633fa45e1");
       setFeedback(null);
     }
@@ -71,6 +75,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       });
       if (res.success) {
         setPassword("");
+        setShowPassword(false);
         window.setTimeout(() => {
           onClose();
         }, 700);
@@ -205,7 +210,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <div className="relative">
                   <Lock className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 stroke-[1.6] text-[#86868B]" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={
@@ -214,8 +219,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         : "输入超星学习通密码"
                     }
                     autoComplete="current-password"
-                    className="h-9.5 w-full rounded-xl border border-black/[0.1] bg-white pr-3 pl-9 text-[13px] text-[#1D1D1F] transition focus:border-[#0071E3] focus:ring-3 focus:ring-[#0071E3]/15 focus:outline-none"
+                    className="h-9.5 w-full rounded-xl border border-black/[0.1] bg-white pr-9.5 pl-9 text-[13px] text-[#1D1D1F] transition focus:border-[#0071E3] focus:ring-3 focus:ring-[#0071E3]/15 focus:outline-none"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[#86868B] transition hover:bg-black/[0.05] hover:text-[#1D1D1F]"
+                    aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                    title={showPassword ? "隐藏密码" : "显示密码"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 stroke-[1.65]" />
+                    ) : (
+                      <Eye className="h-4 w-4 stroke-[1.65]" />
+                    )}
+                  </button>
                 </div>
               </div>
 
