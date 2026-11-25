@@ -1,0 +1,34 @@
+{
+  "_comment": "超星图书馆座位自动预约配置文件示例（使用时请复制为 config.json 并填入自己的信息）",
+  "reservation": {
+    "deptIdEnc": "df23c42633fa45e1",
+    "roomId": "2552",
+    "roomName": "瑶湖图书馆-1F-期刊阅览室",
+    "targetSeats": [
+      "007",
+      "008",
+      "009",
+      "010",
+      "011",
+      "012"
+    ],
+    "startTime": "08:00",
+    "endTime": "21:00",
+    "reserveDaysAhead": 1
+  },
+  "schedule": {
+    "enabled": true,
+    "targetTime": "22:00:00",
+    "prepareSecondsAhead": 60,
+    "winTaskEnabled": false,
+    "winTaskTime": "21:59"
+  },
+  "auth": {
+    "loginMode": "password",
+    "credentials": {
+      "phone": "13800000000",
+      "password": "your_password_here"
+    },
+    "rawCookieStr": ""
+  }
+}
