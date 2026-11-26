@@ -298,7 +298,7 @@ def test_config_service_sanitizes_and_preserves_credentials(tmp_path: Path) -> N
             "reservation": {
                 "targetSeats": ["9", "007", "9", "012"],
                 "startTime": "09:00",
-                "endTime": "22:00",
+                "endTime": "21:00",
             },
             "schedule": {
                 "targetTime": "22:00",
@@ -318,6 +318,21 @@ def test_config_service_sanitizes_and_preserves_credentials(tmp_path: Path) -> N
 
     with pytest.raises(ValueError, match="必须早于结束时间"):
         svc.update_config({"reservation": {"startTime": "21:00", "endTime": "08:00"}})
+
+    with pytest.raises(ValueError, match="最晚为 21:00"):
+        svc.update_config({"reservation": {"startTime": "08:00", "endTime": "22:00"}})
+
+    with pytest.raises(ValueError, match="不得少于 2 小时"):
+        svc.update_config({"reservation": {"startTime": "08:00", "endTime": "09:00"}})
+
+    with pytest.raises(ValueError, match="不得少于 2 小时"):
+        svc.update_config({"reservation": {"startTime": "20:00", "endTime": "21:00"}})
+
+    boundary = svc.update_config(
+        {"reservation": {"startTime": "19:00", "endTime": "21:00"}}
+    )
+    assert boundary.reservation.startTime == "19:00"
+    assert boundary.reservation.endTime == "21:00"
 
 
 async def test_library_service_floor_plan_and_grid_generation(tmp_path: Path) -> None:

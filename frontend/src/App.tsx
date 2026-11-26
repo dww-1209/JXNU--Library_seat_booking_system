@@ -29,9 +29,42 @@ const DEFAULT_RESERVATION: ReservationConfig = {
   roomName: "瑶湖图书馆 · 1F · 期刊阅览室",
   targetSeats: [],
   startTime: "08:00",
-  endTime: "22:00",
+  endTime: "21:00",
   reserveDaysAhead: 1,
 };
+
+const MAX_RESERVATION_END_HOUR = 21;
+const MIN_RESERVATION_DURATION_HOURS = 2;
+
+function parseTimeMinutes(hhmm: string): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!match) return Number.NaN;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return Number.NaN;
+  return h * 60 + m;
+}
+
+function validateReservationWindow(
+  startTime: string,
+  endTime: string,
+): string | null {
+  const startMin = parseTimeMinutes(startTime);
+  const endMin = parseTimeMinutes(endTime);
+  if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) {
+    return "无效的预约时段格式，请重新选择";
+  }
+  if (endMin <= startMin) {
+    return "开始时段必须早于结束时段";
+  }
+  if (endMin > MAX_RESERVATION_END_HOUR * 60) {
+    return "结束时段最晚为 21:00，避免与 22:00 次日开抢冲突";
+  }
+  if (endMin - startMin < MIN_RESERVATION_DURATION_HOURS * 60) {
+    return "学习通规定单次预约时长不得少于 2 小时，请重新选择时段";
+  }
+  return null;
+}
 
 const DEFAULT_SCHEDULE: ScheduleConfig = {
   enabled: true,
@@ -170,15 +203,52 @@ export const App: React.FC = () => {
         let hasSavedPassword = false;
         let fallbackLoggedIn = false;
         if (cfgRes.status === "fulfilled") {
-          setReservation(cfgRes.value.reservation);
+          const loadedRes = cfgRes.value.reservation;
+          const timeErr = validateReservationWindow(
+            loadedRes.startTime,
+            loadedRes.endTime,
+          );
+          if (timeErr) {
+            const rawStartMin = parseTimeMinutes(loadedRes.startTime);
+            const rawEndMin = parseTimeMinutes(loadedRes.endTime);
+            const safeEndH = Math.min(
+              MAX_RESERVATION_END_HOUR,
+              Math.max(
+                8 + MIN_RESERVATION_DURATION_HOURS,
+                Number.isFinite(rawEndMin)
+                  ? Math.floor(rawEndMin / 60)
+                  : MAX_RESERVATION_END_HOUR,
+              ),
+            );
+            const safeStartH = Math.min(
+              safeEndH - MIN_RESERVATION_DURATION_HOURS,
+              Math.max(
+                8,
+                Number.isFinite(rawStartMin) ? Math.floor(rawStartMin / 60) : 8,
+              ),
+            );
+            const normalizedStart = `${String(safeStartH).padStart(2, "0")}:00`;
+            const normalizedEnd = `${String(safeEndH).padStart(2, "0")}:00`;
+            setReservation({
+              ...loadedRes,
+              startTime: normalizedStart,
+              endTime: normalizedEnd,
+            });
+            setDirty(true);
+            showToast(
+              "info",
+              `已将历史时段自动调整为 ${normalizedStart}-${normalizedEnd}（最晚 21:00 且不少于 2 小时），请保存配置`,
+            );
+          } else {
+            setReservation(loadedRes);
+          }
           setSchedule(cfgRes.value.schedule);
           hasSavedPassword = cfgRes.value.auth.hasPassword;
           fallbackLoggedIn = cfgRes.value.auth.loggedIn;
-          if (cfgRes.value.reservation.roomId) {
-            initialRoomId = cfgRes.value.reservation.roomId;
+          if (loadedRes.roomId) {
+            initialRoomId = loadedRes.roomId;
             setRoomDraftSeats({
-              [cfgRes.value.reservation.roomId]:
-                cfgRes.value.reservation.targetSeats,
+              [loadedRes.roomId]: loadedRes.targetSeats,
             });
           }
         }
@@ -259,7 +329,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [loadSeatMap]);
+  }, [loadSeatMap, showToast]);
 
   // Connect SSE stream for real-time logs & runtime status updates
   useEffect(() => {
@@ -306,6 +376,16 @@ export const App: React.FC = () => {
       nextSch: ScheduleConfig,
       silent = false,
     ) => {
+      const windowErr = validateReservationWindow(
+        nextRes.startTime,
+        nextRes.endTime,
+      );
+      if (windowErr) {
+        if (!silent) {
+          showToast("error", windowErr);
+        }
+        throw new Error(windowErr);
+      }
       setSaving(true);
       try {
         await api.saveConfig({
@@ -497,6 +577,14 @@ export const App: React.FC = () => {
   const handleEnableDailyAutoReserve = async (winTaskTime: string) => {
     if (reservation.targetSeats.length === 0) {
       showToast("info", "请先在平面图上点选至少 1 个备选座位");
+      return;
+    }
+    const windowErr = validateReservationWindow(
+      reservation.startTime,
+      reservation.endTime,
+    );
+    if (windowErr) {
+      showToast("error", windowErr);
       return;
     }
     const cleanTime = winTaskTime || schedule.winTaskTime || "21:59";

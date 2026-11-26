@@ -1,11 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import {
+  AlertCircle,
   CalendarClock,
   Check,
   CheckCircle2,
   Clock,
   GripVertical,
+  Info,
   ListOrdered,
   Moon,
   Plus,
@@ -55,13 +57,16 @@ interface RightInspectorProps {
   onVerify: () => void;
 }
 
-const START_HOURS = Array.from({ length: 14 }, (_, i) => {
+const MIN_DURATION_HOURS = 2;
+const MAX_END_HOUR = 21;
+
+const START_HOURS = Array.from({ length: 12 }, (_, i) => {
   const h = i + 8;
   return `${String(h).padStart(2, "0")}:00`;
 });
 
-const END_HOURS = Array.from({ length: 14 }, (_, i) => {
-  const h = i + 9;
+const END_HOURS = Array.from({ length: 12 }, (_, i) => {
+  const h = i + 10;
   return `${String(h).padStart(2, "0")}:00`;
 });
 
@@ -103,6 +108,16 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
   const [winTimeInput, setWinTimeInput] = useState(
     runtime.winTask.runTime || schedule.winTaskTime || "21:59",
   );
+  const [timeAdjustTip, setTimeAdjustTip] = useState<string | null>(null);
+  const timeAdjustTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeAdjustTimerRef.current !== null) {
+        window.clearTimeout(timeAdjustTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const synced = runtime.winTask.runTime || schedule.winTaskTime;
@@ -117,20 +132,65 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
     schedule.skipDate && schedule.skipDate === todayIso,
   );
 
+  const startHourNum = parseInt(reservation.startTime.split(":")[0] || "8", 10);
+  const endHourNum = parseInt(reservation.endTime.split(":")[0] || "21", 10);
+  const durationHours = endHourNum - startHourNum;
+
   const validEndHours = useMemo(() => {
-    const startHourNum = parseInt(reservation.startTime.split(":")[0] || "8", 10);
     return END_HOURS.filter(
-      (t) => parseInt(t.split(":")[0], 10) > startHourNum,
+      (t) => parseInt(t.split(":")[0], 10) >= startHourNum + MIN_DURATION_HOURS,
     );
-  }, [reservation.startTime]);
+  }, [startHourNum]);
+
+  const timeRuleError = useMemo(() => {
+    if (!Number.isFinite(startHourNum) || !Number.isFinite(endHourNum)) {
+      return "无效的预约时段格式，请重新选择";
+    }
+    if (endHourNum <= startHourNum) {
+      return "开始时段必须早于结束时段";
+    }
+    if (endHourNum > MAX_END_HOUR) {
+      return "结束时段最晚为 21:00，避免与 22:00 次日开抢冲突";
+    }
+    if (endHourNum - startHourNum < MIN_DURATION_HOURS) {
+      return "学习通规定单次预约时长不得少于 2 小时，请重新选择";
+    }
+    return null;
+  }, [startHourNum, endHourNum]);
+
+  const clearTimeAdjustTip = () => {
+    if (timeAdjustTimerRef.current !== null) {
+      window.clearTimeout(timeAdjustTimerRef.current);
+      timeAdjustTimerRef.current = null;
+    }
+    setTimeAdjustTip(null);
+  };
 
   const handleStartTimeChange = (nextStart: string) => {
-    const startH = parseInt(nextStart.split(":")[0] || "8", 10);
-    const curEndH = parseInt(reservation.endTime.split(":")[0] || "22", 10);
-    if (curEndH <= startH) {
-      const adjustedEnd = `${String(Math.min(22, startH + 1)).padStart(2, "0")}:00`;
+    const nextStartH = parseInt(nextStart.split(":")[0] || "8", 10);
+    if (
+      !Number.isFinite(endHourNum) ||
+      endHourNum > MAX_END_HOUR ||
+      endHourNum < nextStartH + MIN_DURATION_HOURS
+    ) {
+      const adjustedH = Math.min(
+        MAX_END_HOUR,
+        nextStartH + MIN_DURATION_HOURS,
+      );
+      const adjustedEnd = `${String(adjustedH).padStart(2, "0")}:00`;
       onUpdateReservation({ startTime: nextStart, endTime: adjustedEnd });
+      if (timeAdjustTimerRef.current !== null) {
+        window.clearTimeout(timeAdjustTimerRef.current);
+      }
+      setTimeAdjustTip(
+        `已自动顺延结束时段至 ${adjustedEnd}（学习通要求至少 2 小时）`,
+      );
+      timeAdjustTimerRef.current = window.setTimeout(() => {
+        setTimeAdjustTip(null);
+        timeAdjustTimerRef.current = null;
+      }, 3500);
     } else {
+      clearTimeAdjustTip();
       onUpdateReservation({ startTime: nextStart });
     }
   };
@@ -328,8 +388,8 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             <button
               type="button"
               onClick={onSaveConfig}
-              disabled={saving}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
+              disabled={saving || Boolean(timeRuleError)}
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 savedJustNow
                   ? "bg-[#34C759]/15 text-[#1E8E3E]"
                   : dirty
@@ -376,14 +436,22 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-medium text-[#86868B]">
-                结束时段
-              </label>
+              <div className="flex items-center justify-between gap-1">
+                <label className="block text-[11px] font-medium text-[#86868B]">
+                  结束时段
+                </label>
+                {!timeRuleError && (
+                  <span className="text-[10.5px] font-medium text-[#0071E3] tabular-nums">
+                    共 {durationHours} 小时
+                  </span>
+                )}
+              </div>
               <select
                 value={reservation.endTime}
-                onChange={(e) =>
-                  onUpdateReservation({ endTime: e.target.value })
-                }
+                onChange={(e) => {
+                  clearTimeAdjustTip();
+                  onUpdateReservation({ endTime: e.target.value });
+                }}
                 className="h-8.5 w-full rounded-xl border border-black/[0.08] bg-[#F5F5F7] px-2.5 text-[12.5px] font-medium text-[#1D1D1F] tabular-nums transition focus:border-[#0071E3] focus:bg-white focus:outline-none"
               >
                 {validEndHours.map((t) => (
@@ -394,6 +462,31 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
               </select>
             </div>
           </div>
+
+          {/* Minimum Duration & Latest End-Time Reminder */}
+          {timeRuleError ? (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-[#FF3B30]/25 bg-[#FF3B30]/[0.06] px-2.5 py-2 text-[11px] leading-relaxed text-[#D70015]"
+            >
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 stroke-[1.8]" />
+              <span>{timeRuleError}</span>
+            </div>
+          ) : (
+            <div className="space-y-1 rounded-xl border border-[#0071E3]/15 bg-[#0071E3]/[0.05] px-2.5 py-2 text-[11px] leading-relaxed text-[#424245]">
+              <div className="flex items-start gap-1.5">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 stroke-[1.8] text-[#0071E3]" />
+                <span>
+                  单次预约须满 2 小时，结束时段最晚 21:00（便于 22:00 开抢前自动退座；21:00 后仅余 1 小时，他人亦无法预约）。
+                </span>
+              </div>
+              {timeAdjustTip && (
+                <p className="pl-5 text-[10.5px] font-medium text-[#0071E3] tabular-nums">
+                  {timeAdjustTip}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Static Next-Day Snipe Note + Target Snipe Time */}
           <div className="flex items-center justify-between gap-2 rounded-xl border border-black/[0.05] bg-[#F5F5F7]/80 px-3 py-2">
@@ -469,7 +562,11 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
             <div className="space-y-2">
               <button
                 type="button"
-                disabled={winTaskBusy || reservation.targetSeats.length === 0}
+                disabled={
+                  winTaskBusy ||
+                  reservation.targetSeats.length === 0 ||
+                  Boolean(timeRuleError)
+                }
                 onClick={() =>
                   onEnableDailyAutoReserve(winTimeInput || "21:59")
                 }
@@ -488,9 +585,11 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                 )}
               </button>
               <p className="text-center text-[11px] text-[#86868B]">
-                {reservation.targetSeats.length === 0
-                  ? "请先在左侧平面图点选至少 1 个备选座位"
-                  : "开启后将自动保存配置并托管后台，届时可直接关闭窗口"}
+                {timeRuleError
+                  ? timeRuleError
+                  : reservation.targetSeats.length === 0
+                    ? "请先在左侧平面图点选至少 1 个备选座位"
+                    : "开启后将自动保存配置并托管后台，届时可直接关闭窗口"}
               </p>
             </div>
           ) : (

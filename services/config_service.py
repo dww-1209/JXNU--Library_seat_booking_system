@@ -15,6 +15,8 @@ from services.log_bus import LogBus, get_log_bus, mask_phone_number
 _HHMM_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _HHMMSS_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$")
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_MAX_END_MINUTES = 21 * 60
+_MIN_DURATION_MINUTES = 120
 
 
 class ConfigService:
@@ -157,12 +159,22 @@ class ConfigService:
     def _validate_business_rules(config: AppConfig) -> None:
         start_t = config.reservation.startTime.strip()
         end_t = config.reservation.endTime.strip()
-        if not _HHMM_PATTERN.match(start_t):
+        start_match = _HHMM_PATTERN.match(start_t)
+        if not start_match:
             raise ValueError(f"无效的开始时间格式: {start_t}，应为 HH:MM")
-        if not _HHMM_PATTERN.match(end_t):
+        end_match = _HHMM_PATTERN.match(end_t)
+        if not end_match:
             raise ValueError(f"无效的结束时间格式: {end_t}，应为 HH:MM")
-        if start_t >= end_t:
+        start_min = int(start_match.group(1)) * 60 + int(start_match.group(2))
+        end_min = int(end_match.group(1)) * 60 + int(end_match.group(2))
+        if start_min >= end_min:
             raise ValueError(f"开始时间 ({start_t}) 必须早于结束时间 ({end_t})")
+        if end_min > _MAX_END_MINUTES:
+            raise ValueError(f"结束时间 ({end_t}) 最晚为 21:00，避免与 22:00 次日开抢冲突")
+        if end_min - start_min < _MIN_DURATION_MINUTES:
+            raise ValueError(
+                f"学习通规定单次预约时长不得少于 2 小时（当前 {start_t}-{end_t}）"
+            )
         if config.reservation.reserveDaysAhead < 0 or config.reservation.reserveDaysAhead > 7:
             raise ValueError("预约提前天数必须在 0 到 7 天之间")
         if not _HHMMSS_PATTERN.match(config.schedule.targetTime):

@@ -311,7 +311,7 @@ export function normalizeAppConfig(raw: unknown): SanitizedAppConfig {
       roomName: pickStr(res, ["roomName", "room_name"], ""),
       targetSeats,
       startTime: pickStr(res, ["startTime", "start_time"], "08:00"),
-      endTime: pickStr(res, ["endTime", "end_time"], "22:00"),
+      endTime: pickStr(res, ["endTime", "end_time"], "21:00"),
       reserveDaysAhead: pickNum(
         res,
         ["reserveDaysAhead", "reserve_days_ahead"],
