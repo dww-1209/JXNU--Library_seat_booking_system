@@ -477,7 +477,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
               <div className="flex items-start gap-1.5">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 stroke-[1.8] text-[#0071E3]" />
                 <span>
-                  单次预约须满 2 小时，结束时段最晚 21:00（便于 22:00 开抢前自动退座；21:00 后仅余 1 小时，他人亦无法预约）。
+                  单次预约须满 2 小时，结束时段最晚 21:00（便于 22:00 开抢前自动退座；21:00 后仅余 1 小时他人无法预约，故预约到 21:00 等效于预约到 22:00，可继续放心使用该座位）。
                 </span>
               </div>
               {timeAdjustTip && (
@@ -589,7 +589,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                   ? timeRuleError
                   : reservation.targetSeats.length === 0
                     ? "请先在左侧平面图点选至少 1 个备选座位"
-                    : "开启后将自动保存配置并托管后台，届时可直接关闭窗口"}
+                    : "开启后将自动保存配置并托管后台，可直接关闭窗口（开抢时请保持电脑开机且网络畅通）"}
               </p>
             </div>
           ) : (
@@ -602,7 +602,7 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                   </span>
                 </div>
                 <p className="mt-0.5 text-[11px] text-[#86868B]">
-                  已托管至 Windows 后台计划任务，现在可直接关闭本窗口
+                  已托管至 Windows 后台计划任务，现在可直接关闭本窗口；请确保开抢时电脑保持开机与网络畅通。
                 </p>
               </div>
 
