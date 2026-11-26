@@ -13,6 +13,7 @@ ROOT_DIR = Path(SPECPATH).resolve()
 datas = [
     (str(ROOT_DIR / "frontend" / "dist"), "frontend/dist"),
     (str(ROOT_DIR / "config.example.json"), "."),
+    (str(ROOT_DIR / "assets" / "yanxi.ico"), "assets"),
 ]
 binaries = []
 hiddenimports = [
@@ -87,4 +88,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(ROOT_DIR / "assets" / "yanxi.ico"),
 )

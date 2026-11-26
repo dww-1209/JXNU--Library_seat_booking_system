@@ -85,6 +85,7 @@ export const App: React.FC = () => {
   >({});
   const [schedule, setSchedule] = useState<ScheduleConfig>(DEFAULT_SCHEDULE);
   const [auth, setAuth] = useState<AuthSummary>(DEFAULT_AUTH);
+  const [authChecking, setAuthChecking] = useState(true);
   const [runtime, setRuntime] = useState<RuntimeStatus>(DEFAULT_RUNTIME);
 
   const [seatMap, setSeatMap] = useState<RoomSeatMap | null>(null);
@@ -148,16 +149,17 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Initial bootstrap: load config, rooms, runtime status, auth status, and logs
+  // Initial bootstrap: strictly verify auth status BEFORE rendering unauthenticated UI or opening LoginModal
   useEffect(() => {
     let cancelled = false;
 
     const bootstrap = async () => {
+      setAuthChecking(true);
       setRoomsLoading(true);
       try {
-        const [cfgRes, roomsRes, statusRes, logsRes] = await Promise.allSettled([
+        const [cfgRes, authRes, statusRes, logsRes] = await Promise.allSettled([
           api.getConfig(),
-          api.getRooms(),
+          api.getAuthStatus(),
           api.getRuntimeStatus(),
           api.getLogs(),
         ]);
@@ -166,11 +168,12 @@ export const App: React.FC = () => {
 
         let initialRoomId = "2552";
         let hasSavedPassword = false;
+        let fallbackLoggedIn = false;
         if (cfgRes.status === "fulfilled") {
           setReservation(cfgRes.value.reservation);
           setSchedule(cfgRes.value.schedule);
-          setAuth(cfgRes.value.auth);
           hasSavedPassword = cfgRes.value.auth.hasPassword;
+          fallbackLoggedIn = cfgRes.value.auth.loggedIn;
           if (cfgRes.value.reservation.roomId) {
             initialRoomId = cfgRes.value.reservation.roomId;
             setRoomDraftSeats({
@@ -180,16 +183,26 @@ export const App: React.FC = () => {
           }
         }
 
-        let loadedRooms: Room[] = [];
-        if (roomsRes.status === "fulfilled") {
-          loadedRooms = roomsRes.value;
-          setRooms(loadedRooms);
-          if (
-            loadedRooms.length > 0 &&
-            !loadedRooms.some((r) => r.id === initialRoomId)
-          ) {
-            initialRoomId = loadedRooms[0].id;
-          }
+        const isLoggedIn =
+          authRes.status === "fulfilled"
+            ? authRes.value.loggedIn
+            : fallbackLoggedIn;
+
+        if (authRes.status === "fulfilled") {
+          const liveAuth = authRes.value;
+          setAuth({
+            loggedIn: liveAuth.loggedIn,
+            phoneMasked:
+              liveAuth.phoneMasked ||
+              (cfgRes.status === "fulfilled" ? cfgRes.value.auth.phoneMasked : ""),
+            phone:
+              liveAuth.phone ??
+              (cfgRes.status === "fulfilled" ? cfgRes.value.auth.phone : ""),
+            hasPassword: liveAuth.hasPassword ?? hasSavedPassword,
+            message: liveAuth.message,
+          });
+        } else if (cfgRes.status === "fulfilled") {
+          setAuth(cfgRes.value.auth);
         }
 
         if (statusRes.status === "fulfilled") {
@@ -202,36 +215,41 @@ export const App: React.FC = () => {
           setLogs(logsRes.value.entries.slice(-400));
         }
 
-        if (loadedRooms.length > 0) {
-          await loadSeatMap(initialRoomId);
+        if (isLoggedIn) {
+          let loadedRooms: Room[] = [];
+          try {
+            loadedRooms = await api.getRooms();
+          } catch {
+            loadedRooms = [];
+          }
+          if (cancelled) return;
+
+          setRooms(loadedRooms);
+          if (loadedRooms.length > 0) {
+            if (!loadedRooms.some((r) => r.id === initialRoomId)) {
+              initialRoomId = loadedRooms[0].id;
+            }
+            await loadSeatMap(initialRoomId);
+          } else {
+            setSeatMap(null);
+            setSeatMapError(null);
+          }
         } else {
+          setRooms([]);
           setSeatMap(null);
           setSeatMapError(null);
         }
 
-        // Refresh live auth status quietly and auto-open login on fresh cold start
-        api
-          .getAuthStatus()
-          .then((liveAuth) => {
-            if (!cancelled) {
-              setAuth((prev) => ({
-                ...prev,
-                loggedIn: liveAuth.loggedIn,
-                phoneMasked: liveAuth.phoneMasked || prev.phoneMasked,
-                message: liveAuth.message || prev.message,
-              }));
-              if (!liveAuth.loggedIn && !hasSavedPassword) {
-                setLoginModalOpen(true);
-              }
-            }
-          })
-          .catch(() => {
-            if (!cancelled && !hasSavedPassword) {
-              setLoginModalOpen(true);
-            }
-          });
+        if (!cancelled) {
+          setAuthChecking(false);
+          setRoomsLoading(false);
+          if (!isLoggedIn && !hasSavedPassword) {
+            setLoginModalOpen(true);
+          }
+        }
       } finally {
         if (!cancelled) {
+          setAuthChecking(false);
           setRoomsLoading(false);
         }
       }
@@ -727,6 +745,7 @@ export const App: React.FC = () => {
           selectedRoomId={reservation.roomId}
           onSelectRoom={handleSelectRoom}
           auth={auth}
+          authChecking={authChecking}
           onOpenLogin={() => setLoginModalOpen(true)}
           verification={
             runtime.verification ?? runtime.lastResult?.verification ?? null
@@ -740,6 +759,7 @@ export const App: React.FC = () => {
           loading={seatMapLoading}
           error={seatMapError}
           loggedIn={auth.loggedIn}
+          authChecking={authChecking}
           hasRooms={rooms.length > 0}
           targetSeats={reservation.targetSeats}
           onToggleSeat={handleToggleSeat}

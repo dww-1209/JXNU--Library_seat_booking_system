@@ -176,11 +176,11 @@ def create_app(container: AppContainer | None = None) -> FastAPI:
     @app.get("/api/config", response_model=SanitizedConfigDTO)
     async def get_config() -> SanitizedConfigDTO:
         dto = ctx.config_service.get_sanitized_config(logged_in=ctx.chaoxing.logged_in_cached)
-        win_status = ctx.win_scheduler.get_status()
-        if win_status.get("exists"):
-            dto.schedule.winTaskEnabled = bool(win_status.get("enabled", False))
-            if win_status.get("runTime"):
-                dto.schedule.winTaskTime = str(win_status["runTime"])
+        cached_win = getattr(ctx.win_scheduler, "_cached_status", None)
+        if isinstance(cached_win, dict) and cached_win.get("exists"):
+            dto.schedule.winTaskEnabled = bool(cached_win.get("enabled", False))
+            if cached_win.get("runTime"):
+                dto.schedule.winTaskTime = str(cached_win["runTime"])
         return dto
 
     @app.put("/api/config", response_model=SanitizedConfigDTO)
@@ -281,6 +281,7 @@ def create_app(container: AppContainer | None = None) -> FastAPI:
 
     @app.get("/api/runtime/status", response_model=RuntimeStatus)
     async def get_runtime_status() -> RuntimeStatus:
+        await asyncio.to_thread(ctx.win_scheduler.get_status)
         return ctx.reserve_service.get_status()
 
     @app.post("/api/runtime/start-schedule", response_model=RuntimeStatus)

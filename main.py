@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ctypes
 import json
 import multiprocessing
 import os
@@ -24,7 +25,7 @@ import httpx
 import uvicorn
 
 from adapters.beep_notifier import BeepNotifier
-from domain.paths import get_app_dir, is_frozen
+from domain.paths import get_app_dir, get_resource_dir, is_frozen
 from services.log_bus import get_log_bus
 from ui.server import AppContainer, create_app
 
@@ -127,6 +128,19 @@ def run_desktop_mode(host: str = "127.0.0.1", port: int = 0) -> int:
 
     bus.info("MAIN", f"正在打开原生桌面窗口: {base_url}", detail={"url": base_url})
 
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "JXNU.YanxiSeatReserver.Desktop"
+            )
+        except Exception:
+            pass
+
+    ico_candidate = get_resource_dir() / "assets" / "yanxi.ico"
+    if not ico_candidate.exists():
+        ico_candidate = get_app_dir() / "assets" / "yanxi.ico"
+    icon_arg = str(ico_candidate) if ico_candidate.exists() else None
+
     try:
         import webview
 
@@ -137,7 +151,7 @@ def run_desktop_mode(host: str = "127.0.0.1", port: int = 0) -> int:
             height=860,
             min_size=(1100, 720),
         )
-        webview.start()
+        webview.start(icon=icon_arg)
     finally:
         bus.info("MAIN", "桌面窗口已关闭，正在清理后台服务与浏览器资源")
         bg_loop = loop_holder.get("loop")

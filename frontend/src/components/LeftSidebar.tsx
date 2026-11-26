@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import { LayoutGroup, motion } from "motion/react";
 import {
-  BookOpenCheck,
   Building2,
   CheckCircle2,
   ChevronRight,
@@ -17,6 +16,7 @@ interface LeftSidebarProps {
   selectedRoomId: string;
   onSelectRoom: (room: Room) => void;
   auth: AuthSummary;
+  authChecking: boolean;
   onOpenLogin: () => void;
   verification: VerificationResult | null;
   verifying: boolean;
@@ -29,6 +29,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   selectedRoomId,
   onSelectRoom,
   auth,
+  authChecking,
   onOpenLogin,
   verification,
   verifying,
@@ -61,9 +62,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       <div className="space-y-3 border-b border-black/[0.06] px-4 pt-4 pb-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#1D1D1F] text-white shadow-xs">
-              <BookOpenCheck className="h-4 w-4 stroke-[1.75]" />
-            </div>
+            <img
+              src="/yanxi-icon.png"
+              alt="砚席"
+              className="h-9 w-9 shrink-0 rounded-[10px] object-contain shadow-xs"
+            />
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[14px] font-semibold tracking-tight text-[#1D1D1F]">
@@ -89,17 +92,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <div className="flex min-w-0 items-center gap-2">
             <span
               className={`h-2 w-2 shrink-0 rounded-full ${
-                auth.loggedIn ? "bg-[#34C759]" : "bg-[#FF9500]"
+                authChecking
+                  ? "animate-pulse bg-[#86868B]"
+                  : auth.loggedIn
+                    ? "bg-[#34C759]"
+                    : "bg-[#FF9500]"
               }`}
             />
             <div className="min-w-0">
               <div className="truncate text-[12px] font-medium text-[#1D1D1F] tabular-nums">
-                {auth.loggedIn
-                  ? auth.phoneMasked || "已登录账号"
-                  : auth.phoneMasked || "未登录账号"}
+                {authChecking
+                  ? "正在检测登录状态..."
+                  : auth.loggedIn
+                    ? auth.phoneMasked || "已登录账号"
+                    : auth.phoneMasked || "未登录账号"}
               </div>
               <div className="truncate text-[10.5px] text-[#86868B]">
-                {auth.loggedIn ? "会话在线 · 点击管理" : "点击登录学习通"}
+                {authChecking
+                  ? "同步学习通会话"
+                  : auth.loggedIn
+                    ? "会话在线 · 点击管理"
+                    : "点击登录学习通"}
               </div>
             </div>
           </div>
@@ -112,8 +125,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
       {/* Grouped Reading Room List */}
       <div className="flex-1 overflow-y-auto px-2.5 py-3">
-        {roomsLoading && rooms.length === 0 ? (
-          <div className="space-y-2 px-1.5">
+        {(authChecking || roomsLoading) && rooms.length === 0 ? (
+          <div className="space-y-2.5 px-1.5">
+            <div className="flex items-center gap-2 px-1 text-[11.5px] font-medium text-[#86868B]">
+              <RefreshCw className="h-3 w-3 animate-spin stroke-[1.75] text-[#0071E3]" />
+              <span>正在同步馆藏教室...</span>
+            </div>
             {[1, 2, 3, 4, 5].map((n) => (
               <div
                 key={n}
@@ -121,7 +138,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               />
             ))}
           </div>
-        ) : rooms.length === 0 && !auth.loggedIn ? (
+        ) : !authChecking && rooms.length === 0 && !auth.loggedIn ? (
           <div className="flex h-full flex-col items-center justify-center px-4 py-10 text-center">
             <Building2 className="h-6 w-6 stroke-[1.5] text-[#AEAEB2]" />
             <p className="mt-2 text-[12px] font-medium text-[#86868B]">

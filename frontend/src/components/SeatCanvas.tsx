@@ -28,6 +28,7 @@ interface SeatCanvasProps {
   loading: boolean;
   error: string | null;
   loggedIn: boolean;
+  authChecking: boolean;
   hasRooms: boolean;
   targetSeats: string[];
   onToggleSeat: (seatNum: string) => void;
@@ -57,6 +58,7 @@ export const SeatCanvas: React.FC<SeatCanvasProps> = ({
   loading,
   error,
   loggedIn,
+  authChecking,
   hasRooms,
   targetSeats,
   onToggleSeat,
@@ -453,7 +455,7 @@ export const SeatCanvas: React.FC<SeatCanvasProps> = ({
                 )}
               </div>
             </>
-          ) : !loggedIn && !hasRooms && !loading ? (
+          ) : !authChecking && !loggedIn && !hasRooms && !loading ? (
             <span className="text-[14px] font-medium text-[#86868B]">
               等待登录学习通账号以同步阅览室
             </span>
@@ -528,16 +530,18 @@ export const SeatCanvas: React.FC<SeatCanvasProps> = ({
           backgroundSize: "20px 20px",
         }}
       >
-        {loading && !seatMap && (
+        {(authChecking || (loading && !seatMap)) && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#F5F5F7]/85 backdrop-blur-xs">
             <RefreshCw className="h-6 w-6 animate-spin stroke-[1.6] text-[#0071E3]" />
             <p className="text-[13px] font-medium text-[#86868B]">
-              正在载入阅览室平面坐标...
+              {authChecking
+                ? "正在检测账号登录状态..."
+                : "正在载入阅览室平面坐标..."}
             </p>
           </div>
         )}
 
-        {!loggedIn && !hasRooms && !seatMap && !loading && (
+        {!authChecking && !loggedIn && !hasRooms && !seatMap && !loading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6">
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.98 }}
